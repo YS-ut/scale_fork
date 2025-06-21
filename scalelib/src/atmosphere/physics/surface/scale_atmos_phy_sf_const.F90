@@ -236,7 +236,7 @@ contains
       enddo
       enddo
 
-    elseif (ATMOS_PHY_SF_FLG_CG96 == 1) then  ! Use CG96 scheme
+    elseif (ATMOS_PHY_SF_FLG_CG96 == .true.) then  ! Use CG96 scheme
       !-----< momentum >-----
       
       !$omp parallel do &
