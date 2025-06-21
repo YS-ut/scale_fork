@@ -246,7 +246,7 @@ contains
              call ATMOS_PHY_SF_const_flux( &
                   IA, IS, IE, JA, JS, JE, &
                   ATM_W(:,:,l), ATM_U(:,:,l), ATM_V(:,:,l), ATM_TEMP(:,:,l), & ! [IN]
-                  Z1(:,:,l), SFC_DENS(:,:,l),                                & ! [IN]
+                  ATM_PRES(:,:,l), ATM_QV(:,:,l), Z1(:,:,l), SFC_DENS(:,:,l),& ! [IN]
                   SFLX_MW(:,:,l), SFLX_MU(:,:,l), SFLX_MV(:,:,l),            & ! [OUT]
                   SFLX_SH(:,:,l), SFLX_LH(:,:,l), SFLX_QV(:,:,l),            & ! [OUT]
                   U10(:,:,l), V10(:,:,l)                                     ) ! [OUT]

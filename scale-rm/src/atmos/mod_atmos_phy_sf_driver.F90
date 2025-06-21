@@ -363,10 +363,10 @@ contains
 
           case ( 'CONST' )
 
-             !$acc update host(ATM_W,ATM_U,ATM_V,ATM_TEMP,SFC_DENS)
+             !$acc update host(ATM_W,ATM_U,ATM_V,ATM_TEMP,ATM_PRES,ATM_QV,SFC_DENS)
              call ATMOS_PHY_SF_const_flux( IA, IS, IE, JA, JS, JE,                            & ! [IN]
-                                           ATM_W(:,:), ATM_U(:,:), ATM_V(:,:), SFC_TEMP(:,:), & ! [IN]
-                                           Z1(:,:), SFC_DENS(:,:),                            & ! [IN]
+                                           ATM_W(:,:), ATM_U(:,:), ATM_V(:,:), ATM_TEMP(:,:), & ! [IN]
+                                           ATM_PRES(:,:), ATM_QV(:,:), Z1(:,:), SFC_DENS(:,:),& ! [IN]
                                            SFLX_MW(:,:), SFLX_MU(:,:), SFLX_MV(:,:),          & ! [OUT]
                                            SFLX_SH(:,:), SFLX_LH(:,:), SFLX_QV(:,:),          & ! [OUT]
                                            U10(:,:), V10(:,:)                                 ) ! [OUT]

@@ -57,6 +57,11 @@ module scale_atmos_phy_sf_const
   logical,  private            :: ATMOS_PHY_SF_FLG_SH_DIURNAL = .false. ! diurnal modulation for sensible heat flux?
   real(RP), private            :: ATMOS_PHY_SF_Const_FREQ     = 24.0_RP ! frequency of sensible heat flux modulation [hour]
 
+  logical,  private            :: ATMOS_PHY_SF_FLG_CG96 = .false.  ! Use another scheme?
+  real(RP), private            :: ATMOS_PHY_SF_COEF_MOM    = 1.0_RP
+  real(RP), private            :: ATMOS_PHY_SF_COEF_SH     = 1.0_RP
+  real(RP), private            :: ATMOS_PHY_SF_COEF_QV     = 1.0_RP
+  real(RP), private            :: ATMOS_PHY_SF_SFC_TEMP    = 301.0_RP
   !-----------------------------------------------------------------------------
 contains
   !-----------------------------------------------------------------------------
@@ -75,7 +80,13 @@ contains
        ATMOS_PHY_SF_Const_SH,       &
        ATMOS_PHY_SF_Const_LH,       &
        ATMOS_PHY_SF_FLG_SH_DIURNAL, &
-       ATMOS_PHY_SF_Const_FREQ
+       ATMOS_PHY_SF_Const_FREQ,     &
+       ATMOS_PHY_SF_FLG_CG96,       &
+       ATMOS_PHY_SF_COEF_MOM,       &
+       ATMOS_PHY_SF_COEF_SH,        &
+       ATMOS_PHY_SF_COEF_QV,        &
+       ATMOS_PHY_SF_SFC_TEMP
+
 
     integer :: ierr
     !---------------------------------------------------------------------------
@@ -102,14 +113,19 @@ contains
   !> Constant flux
   subroutine ATMOS_PHY_SF_const_flux( &
        IA, IS, IE, JA, JS, JE, &
-       ATM_W, ATM_U, ATM_V, ATM_TEMP,               &
-       ATM_Z1, SFC_DENS,                            &
+       ATM_W, ATM_U, ATM_V, ATM_TEMP, ATM_PRES,     &
+       ATM_QV, ATM_Z1, SFC_DENS,                    &
        SFLX_MW, SFLX_MU, SFLX_MV, SFLX_SH, SFLX_LH, &
        SFLX_QV,                                     &
        U10, V10                                     )
     use scale_const, only: &
-       PI    => CONST_PI
+       PI      => CONST_PI,      &
+       Rdry    => CONST_Rdry,    &
+       CPdry   => CONST_CPdry,   &
+       PRE00   => CONST_PRE00
     use scale_atmos_hydrometeor, only: &
+       SATURATION_pres2qsat_all => ATMOS_SATURATION_pres2qsat_all
+    use scale_atmos_saturation, only: &
        HYDROMETEOR_LHV => ATMOS_HYDROMETEOR_LHV
     use scale_time, only: &
        TIME_NOWSEC
@@ -121,6 +137,8 @@ contains
     real(RP), intent(in) :: ATM_U   (IA,JA) ! velocity u  at the lowermost layer (cell center) [m/s]
     real(RP), intent(in) :: ATM_V   (IA,JA) ! velocity v  at the lowermost layer (cell center) [m/s]
     real(RP), intent(in) :: ATM_TEMP(IA,JA) ! temperature at the lowermost layer (cell center) [K]
+    real(RP), intent(in) :: ATM_PRES(IA,JA) ! pressure    at the lowermost layer (cell center) [Pa]
+    real(RP), intent(in) :: ATM_QV  (IA,JA) ! qv          at the lowermost layer (cell center) [kg/kg]
     real(RP), intent(in) :: ATM_Z1  (IA,JA) ! height of the lowermost grid from surface (cell center) [m]
     real(RP), intent(in) :: SFC_DENS(IA,JA) ! density     at the surface atmosphere [kg/m3]
 
@@ -141,6 +159,11 @@ contains
     real(RP) :: modulation
     real(RP) :: LHV(IA,JA)
 
+    real(RP) :: cm_deacon
+    real(RP) :: pt_atm
+    real(RP) :: pt_sfc
+    real(RP) :: qv_sfc
+   
     integer  :: i, j
     !---------------------------------------------------------------------------
 
@@ -149,67 +172,105 @@ contains
     !$omp parallel do
     do j = JS, JE
     do i = IS, IE
-       ATM_Uabs(i,j) = min( ATMOS_PHY_SF_U_maxM, max( ATMOS_PHY_SF_U_minM, &
-            sqrt( ATM_W(i,j)**2 + ATM_U(i,j)**2 + ATM_V(i,j)**2 ) ) ) ! at cell center
+      ATM_Uabs(i,j) = min( ATMOS_PHY_SF_U_maxM, max( ATMOS_PHY_SF_U_minM, &
+         sqrt( ATM_W(i,j)**2 + ATM_U(i,j)**2 + ATM_V(i,j)**2 ) ) ) ! at cell center
     enddo
     enddo
 
-    if   ( ATMOS_PHY_SF_FLG_MOM_FLUX == 0 ) then ! Bulk coefficient is constant
-       !$omp parallel do
-       do j = JS, JE
-       do i = IS, IE
-          Cm(i,j) = ATMOS_PHY_SF_Const_Cm
-       enddo
-       enddo
-    elseif( ATMOS_PHY_SF_FLG_MOM_FLUX == 1 ) then ! Friction velocity is constant
-       !$omp parallel do
-       do j = JS, JE
-       do i = IS, IE
-          Cm(i,j) = ( ATMOS_PHY_SF_Const_Ustar / ATM_Uabs(i,j) )**2
-          Cm(i,j) = min( max( Cm(i,j), ATMOS_PHY_SF_Cm_min ), ATMOS_PHY_SF_Cm_max )
-       enddo
-       enddo
-    endif
+    if (ATMOS_PHY_SF_FLG_CG96 == 0) then  ! Use default scheme
 
-    !-----< momentum >-----
+      if   ( ATMOS_PHY_SF_FLG_MOM_FLUX == 0 ) then ! Bulk coefficient is constant
+         !$omp parallel do
+         do j = JS, JE
+         do i = IS, IE
+            Cm(i,j) = ATMOS_PHY_SF_Const_Cm
+         enddo
+         enddo
+      elseif( ATMOS_PHY_SF_FLG_MOM_FLUX == 1 ) then ! Friction velocity is constant
+         !$omp parallel do
+         do j = JS, JE
+         do i = IS, IE
+            Cm(i,j) = ( ATMOS_PHY_SF_Const_Ustar / ATM_Uabs(i,j) )**2
+            Cm(i,j) = min( max( Cm(i,j), ATMOS_PHY_SF_Cm_min ), ATMOS_PHY_SF_Cm_max )
+         enddo
+         enddo
+      endif
 
-    !$omp parallel do
-    do j = JS, JE
-    do i = IS, IE
-       SFLX_MW(i,j) = -Cm(i,j) * ATM_Uabs(i,j) * SFC_DENS(i,j) * ATM_W(i,j)
-       SFLX_MU(i,j) = -Cm(i,j) * ATM_Uabs(i,j) * SFC_DENS(i,j) * ATM_U(i,j)
-       SFLX_MV(i,j) = -Cm(i,j) * ATM_Uabs(i,j) * SFC_DENS(i,j) * ATM_V(i,j)
-    enddo
-    enddo
+      !-----< momentum >-----
 
-    !-----< heat flux >-----
+      !$omp parallel do
+      do j = JS, JE
+      do i = IS, IE
+         SFLX_MW(i,j) = -Cm(i,j) * ATM_Uabs(i,j) * SFC_DENS(i,j) * ATM_W(i,j)
+         SFLX_MU(i,j) = -Cm(i,j) * ATM_Uabs(i,j) * SFC_DENS(i,j) * ATM_U(i,j)
+         SFLX_MV(i,j) = -Cm(i,j) * ATM_Uabs(i,j) * SFC_DENS(i,j) * ATM_V(i,j)
+      enddo
+      enddo
 
-    if ( ATMOS_PHY_SF_FLG_SH_DIURNAL ) then
-       modulation = sin( 2.0_RP * PI * TIME_NOWSEC / 3600.0_RP / ATMOS_PHY_SF_Const_FREQ )
-    else
-       modulation = 1.0_RP
-    endif
+      !-----< heat flux >-----
 
-    !$omp parallel do
-    do j = JS, JE
-    do i = IS, IE
-       SFLX_SH(i,j) = ATMOS_PHY_SF_Const_SH * modulation
-       SFLX_LH(i,j) = ATMOS_PHY_SF_Const_LH
-    enddo
-    enddo
+      if ( ATMOS_PHY_SF_FLG_SH_DIURNAL ) then
+         modulation = sin( 2.0_RP * PI * TIME_NOWSEC / 3600.0_RP / ATMOS_PHY_SF_Const_FREQ )
+      else
+         modulation = 1.0_RP
+      endif
 
-    !-----< mass flux >-----
-    call HYDROMETEOR_LHV( &
+      !$omp parallel do
+      do j = JS, JE
+      do i = IS, IE
+         SFLX_SH(i,j) = ATMOS_PHY_SF_Const_SH * modulation
+         SFLX_LH(i,j) = ATMOS_PHY_SF_Const_LH
+      enddo
+      enddo
+
+      !-----< mass flux >-----
+      call HYDROMETEOR_LHV( &
+            IA, IS, IE, JA, JS, JE, &
+            ATM_TEMP(:,:), & ! [IN]
+            LHV(:,:)       ) ! [OUT]
+
+      !$omp parallel do
+      do j = JS, JE
+      do i = IS, IE
+         SFLX_QV(i,j) = SFLX_LH(i,j) / LHV(i,j)
+      enddo
+      enddo
+
+    elseif (ATMOS_PHY_SF_FLG_CG96 == 1) then  ! Use CG96 scheme
+      !-----< momentum >-----
+      
+      !$omp parallel do
+      do j = JS, JE
+      do i = IS, IE
+         cm_deacon = 0.0011_RP + 0.00004_RP * ATM_Uabs(i,j)  ! Deacon's formula
+         SFLX_MW(i,j) = -ATMOS_PHY_SF_COEF_MOM * cm_deacon * ATM_Uabs(i,j) * SFC_DENS(i,j) * ATM_W(i,j)
+         SFLX_MU(i,j) = -ATMOS_PHY_SF_COEF_MOM * cm_deacon * ATM_Uabs(i,j) * SFC_DENS(i,j) * ATM_U(i,j)
+         SFLX_MV(i,j) = -ATMOS_PHY_SF_COEF_MOM * cm_deacon * ATM_Uabs(i,j) * SFC_DENS(i,j) * ATM_V(i,j)
+      enddo
+      enddo
+
+      !-----< heat flux >-----
+
+      call HYDROMETEOR_LHV( &
          IA, IS, IE, JA, JS, JE, &
          ATM_TEMP(:,:), & ! [IN]
          LHV(:,:)       ) ! [OUT]
 
-    !$omp parallel do
-    do j = JS, JE
-    do i = IS, IE
-       SFLX_QV(i,j) = SFLX_LH(i,j) / LHV(i,j)
-    enddo
-    enddo
+      !$omp parallel do
+      do j = JS, JE
+      do i = IS, IE
+         pt_atm = ATM_TEMP(i,j) * ( PRE00 / ATM_PRES(i,j) )**( Rdry / CPdry )
+         pt_sfc = ATMOS_PHY_SF_SFC_TEMP * ( PRE00 / ATM_PRES(i,j) )**( Rdry / CPdry )
+         call SATURATION_pres2qsat_all( &
+         ATMOS_PHY_SF_SFC_TEMP, ATM_PRES(i,j) , &  ! [IN]
+         qv_sfc   )                                ! [OUT]
+         SFLX_SH(i,j) = ATMOS_PHY_SF_COEF_SH * 0.0010_RP * ATM_Uabs(i,j) * (pt_sfc - pt_atm)
+         SFLX_QV(i,j) = ATMOS_PHY_SF_COEF_QV * 0.0012_RP * ATM_Uabs(i,j) * (qv_sfc - ATM_QV(i,j))
+         SFLX_LH(i,j) = SFLX_QV(i,j) * LHV(i,j)
+      enddo
+      enddo
+
+    endif
 
     !-----< U10, V10 >-----
 
