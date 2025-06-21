@@ -124,9 +124,9 @@ contains
        CPdry   => CONST_CPdry,   &
        PRE00   => CONST_PRE00
     use scale_atmos_hydrometeor, only: &
-       SATURATION_pres2qsat_all => ATMOS_SATURATION_pres2qsat_all
-    use scale_atmos_saturation, only: &
        HYDROMETEOR_LHV => ATMOS_HYDROMETEOR_LHV
+    use scale_atmos_saturation, only: &
+       SATURATION_pres2qsat_all => ATMOS_SATURATION_pres2qsat_all 
     use scale_time, only: &
        TIME_NOWSEC
     implicit none
@@ -240,6 +240,7 @@ contains
       !-----< momentum >-----
       
       !$omp parallel do
+      !$omp private(cm_deacon)
       do j = JS, JE
       do i = IS, IE
          cm_deacon = 0.0011_RP + 0.00004_RP * ATM_Uabs(i,j)  ! Deacon's formula
@@ -257,6 +258,7 @@ contains
          LHV(:,:)       ) ! [OUT]
 
       !$omp parallel do
+      !$omp private(pt_atm,pt_sfc,qv_sfc)
       do j = JS, JE
       do i = IS, IE
          pt_atm = ATM_TEMP(i,j) * ( PRE00 / ATM_PRES(i,j) )**( Rdry / CPdry )
