@@ -177,7 +177,7 @@ contains
     enddo
     enddo
 
-    if (ATMOS_PHY_SF_FLG_CG96 == 0) then  ! Use default scheme
+    if (ATMOS_PHY_SF_FLG_CG96 == .false.) then  ! Use default scheme
 
       if   ( ATMOS_PHY_SF_FLG_MOM_FLUX == 0 ) then ! Bulk coefficient is constant
          !$omp parallel do
@@ -186,7 +186,7 @@ contains
             Cm(i,j) = ATMOS_PHY_SF_Const_Cm
          enddo
          enddo
-      elseif( ATMOS_PHY_SF_FLG_MOM_FLUX == 1 ) then ! Friction velocity is constant
+      elseif( ATMOS_PHY_SF_FLG_MOM_FLUX == .true. ) then ! Friction velocity is constant
          !$omp parallel do
          do j = JS, JE
          do i = IS, IE
@@ -239,7 +239,7 @@ contains
     elseif (ATMOS_PHY_SF_FLG_CG96 == 1) then  ! Use CG96 scheme
       !-----< momentum >-----
       
-      !$omp parallel do
+      !$omp parallel do &
       !$omp private(cm_deacon)
       do j = JS, JE
       do i = IS, IE
@@ -257,7 +257,7 @@ contains
          ATM_TEMP(:,:), & ! [IN]
          LHV(:,:)       ) ! [OUT]
 
-      !$omp parallel do
+      !$omp parallel do &
       !$omp private(pt_atm,pt_sfc,qv_sfc)
       do j = JS, JE
       do i = IS, IE
