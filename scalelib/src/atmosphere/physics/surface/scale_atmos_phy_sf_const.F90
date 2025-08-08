@@ -61,7 +61,6 @@ module scale_atmos_phy_sf_const
   real(RP), private            :: ATMOS_PHY_SF_COEF_MOM    = 1.0_RP
   real(RP), private            :: ATMOS_PHY_SF_COEF_SH     = 1.0_RP
   real(RP), private            :: ATMOS_PHY_SF_COEF_QV     = 1.0_RP
-  real(RP), private            :: ATMOS_PHY_SF_SFC_TEMP    = 301.0_RP
   !-----------------------------------------------------------------------------
 contains
   !-----------------------------------------------------------------------------
@@ -84,8 +83,7 @@ contains
        ATMOS_PHY_SF_FLG_CG96,       &
        ATMOS_PHY_SF_COEF_MOM,       &
        ATMOS_PHY_SF_COEF_SH,        &
-       ATMOS_PHY_SF_COEF_QV,        &
-       ATMOS_PHY_SF_SFC_TEMP
+       ATMOS_PHY_SF_COEF_QV
 
 
     integer :: ierr
@@ -114,7 +112,7 @@ contains
   subroutine ATMOS_PHY_SF_const_flux( &
        IA, IS, IE, JA, JS, JE, &
        ATM_W, ATM_U, ATM_V, ATM_TEMP, ATM_PRES,     &
-       ATM_QV, ATM_Z1, SFC_DENS,                    &
+       ATM_QV, ATM_Z1, SFC_DENS, SFC_TEMP,          &
        SFLX_MW, SFLX_MU, SFLX_MV, SFLX_SH, SFLX_LH, &
        SFLX_QV,                                     &
        U10, V10                                     )
@@ -141,6 +139,7 @@ contains
     real(RP), intent(in) :: ATM_QV  (IA,JA) ! qv          at the lowermost layer (cell center) [kg/kg]
     real(RP), intent(in) :: ATM_Z1  (IA,JA) ! height of the lowermost grid from surface (cell center) [m]
     real(RP), intent(in) :: SFC_DENS(IA,JA) ! density     at the surface atmosphere [kg/m3]
+    real(RP), intent(in) :: SFC_TEMP(IA,JA) ! temperature at the surface atmosphere [kg/m3]
 
     real(RP), intent(out) :: SFLX_MW(IA,JA) ! surface flux for z-momentum    (area center)   [m/s*kg/m2/s]
     real(RP), intent(out) :: SFLX_MU(IA,JA) ! surface flux for x-momentum    (area center)   [m/s*kg/m2/s]
@@ -262,10 +261,10 @@ contains
       do j = JS, JE
       do i = IS, IE
          pt_atm = ATM_TEMP(i,j) * ( PRE00 / ATM_PRES(i,j) )**( Rdry / CPdry )
-         pt_sfc = ATMOS_PHY_SF_SFC_TEMP * ( PRE00 / ATM_PRES(i,j) )**( Rdry / CPdry )
+         pt_sfc = SFC_TEMP(i,j) * ( PRE00 / ATM_PRES(i,j) )**( Rdry / CPdry )
          call SATURATION_pres2qsat_all( &
-         ATMOS_PHY_SF_SFC_TEMP, ATM_PRES(i,j) , &  ! [IN]
-         qv_sfc   )                                ! [OUT]
+         SFC_TEMP(i,j), ATM_PRES(i,j) , &  ! [IN]
+         qv_sfc )                          ! [OUT]
          SFLX_SH(i,j) = ATMOS_PHY_SF_COEF_SH * 0.0010_RP * ATM_Uabs(i,j) * (pt_sfc - pt_atm)
          SFLX_QV(i,j) = ATMOS_PHY_SF_COEF_QV * 0.0012_RP * ATM_Uabs(i,j) * (qv_sfc - ATM_QV(i,j))
          SFLX_LH(i,j) = SFLX_QV(i,j) * LHV(i,j)
