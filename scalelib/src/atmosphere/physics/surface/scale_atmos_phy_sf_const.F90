@@ -237,8 +237,7 @@ contains
     elseif (ATMOS_PHY_SF_FLG_CONST_COEF == .true.) then  ! Use CG96 scheme
       !-----< momentum >-----
       
-      !$omp parallel do &
-      !$omp private(cm_deacon)
+      !$omp parallel do
       do j = JS, JE
       do i = IS, IE
          SFLX_MW(i,j) = -ATMOS_PHY_SF_COEF_MOM * 0.0013_RP * ATM_Uabs(i,j) * SFC_DENS(i,j) * ATM_W(i,j)
