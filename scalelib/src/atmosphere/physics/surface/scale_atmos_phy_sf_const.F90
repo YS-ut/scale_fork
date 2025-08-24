@@ -57,7 +57,7 @@ module scale_atmos_phy_sf_const
   logical,  private            :: ATMOS_PHY_SF_FLG_SH_DIURNAL = .false. ! diurnal modulation for sensible heat flux?
   real(RP), private            :: ATMOS_PHY_SF_Const_FREQ     = 24.0_RP ! frequency of sensible heat flux modulation [hour]
 
-  logical,  private            :: ATMOS_PHY_SF_FLG_CG96 = .false.  ! Use another scheme?
+  logical,  private            :: ATMOS_PHY_SF_FLG_CONST_COEF = .false.  ! Use another scheme?
   real(RP), private            :: ATMOS_PHY_SF_COEF_MOM    = 1.0_RP
   real(RP), private            :: ATMOS_PHY_SF_COEF_SH     = 1.0_RP
   real(RP), private            :: ATMOS_PHY_SF_COEF_QV     = 1.0_RP
@@ -80,7 +80,7 @@ contains
        ATMOS_PHY_SF_Const_LH,       &
        ATMOS_PHY_SF_FLG_SH_DIURNAL, &
        ATMOS_PHY_SF_Const_FREQ,     &
-       ATMOS_PHY_SF_FLG_CG96,       &
+       ATMOS_PHY_SF_FLG_CONST_COEF, &
        ATMOS_PHY_SF_COEF_MOM,       &
        ATMOS_PHY_SF_COEF_SH,        &
        ATMOS_PHY_SF_COEF_QV
@@ -158,7 +158,6 @@ contains
     real(RP) :: modulation
     real(RP) :: LHV(IA,JA)
 
-    real(RP) :: cm_deacon
     real(RP) :: pt_atm
     real(RP) :: pt_sfc
     real(RP) :: qv_sfc
@@ -176,7 +175,7 @@ contains
     enddo
     enddo
 
-    if (ATMOS_PHY_SF_FLG_CG96 == .false.) then  ! Use default scheme
+    if (ATMOS_PHY_SF_FLG_CONST_COEF == .false.) then  ! Use default scheme
 
       if   ( ATMOS_PHY_SF_FLG_MOM_FLUX == 0 ) then ! Bulk coefficient is constant
          !$omp parallel do
@@ -235,17 +234,16 @@ contains
       enddo
       enddo
 
-    elseif (ATMOS_PHY_SF_FLG_CG96 == .true.) then  ! Use CG96 scheme
+    elseif (ATMOS_PHY_SF_FLG_CONST_COEF == .true.) then  ! Use CG96 scheme
       !-----< momentum >-----
       
       !$omp parallel do &
       !$omp private(cm_deacon)
       do j = JS, JE
       do i = IS, IE
-         cm_deacon = 0.0011_RP + 0.00004_RP * ATM_Uabs(i,j)  ! Deacon's formula
-         SFLX_MW(i,j) = -ATMOS_PHY_SF_COEF_MOM * cm_deacon * ATM_Uabs(i,j) * SFC_DENS(i,j) * ATM_W(i,j)
-         SFLX_MU(i,j) = -ATMOS_PHY_SF_COEF_MOM * cm_deacon * ATM_Uabs(i,j) * SFC_DENS(i,j) * ATM_U(i,j)
-         SFLX_MV(i,j) = -ATMOS_PHY_SF_COEF_MOM * cm_deacon * ATM_Uabs(i,j) * SFC_DENS(i,j) * ATM_V(i,j)
+         SFLX_MW(i,j) = -ATMOS_PHY_SF_COEF_MOM * 0.0013_RP * ATM_Uabs(i,j) * SFC_DENS(i,j) * ATM_W(i,j)
+         SFLX_MU(i,j) = -ATMOS_PHY_SF_COEF_MOM * 0.0013_RP * ATM_Uabs(i,j) * SFC_DENS(i,j) * ATM_U(i,j)
+         SFLX_MV(i,j) = -ATMOS_PHY_SF_COEF_MOM * 0.0013_RP * ATM_Uabs(i,j) * SFC_DENS(i,j) * ATM_V(i,j)
       enddo
       enddo
 
@@ -265,8 +263,8 @@ contains
          call SATURATION_pres2qsat_all( &
          SFC_TEMP(i,j), ATM_PRES(i,j) , &  ! [IN]
          qv_sfc )                          ! [OUT]
-         SFLX_SH(i,j) = ATMOS_PHY_SF_COEF_SH * 0.0010_RP * ATM_Uabs(i,j) * (pt_sfc - pt_atm)
-         SFLX_QV(i,j) = ATMOS_PHY_SF_COEF_QV * 0.0012_RP * ATM_Uabs(i,j) * (qv_sfc - ATM_QV(i,j))
+         SFLX_SH(i,j) = ATMOS_PHY_SF_COEF_SH * 0.0013_RP * ATM_Uabs(i,j) * (pt_sfc - pt_atm)
+         SFLX_QV(i,j) = ATMOS_PHY_SF_COEF_QV * 0.0013_RP * ATM_Uabs(i,j) * (qv_sfc - ATM_QV(i,j))
          SFLX_LH(i,j) = SFLX_QV(i,j) * LHV(i,j)
       enddo
       enddo
